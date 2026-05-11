@@ -35,22 +35,9 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const [proposalContext, setProposalContext] = useState(null)
   const [roundEnding, setRoundEnding] = useState(false)
   const [eventAlert, setEventAlert] = useState(null)
-  const [showWelcome, setShowWelcome] = useState(false)
-
-  // Refs to access latest state inside setTimeout callbacks
-  const obrasRef = useRef(obras)
-  const budgetRef = useRef(budget)
-  useEffect(() => { obrasRef.current = obras }, [obras])
-  useEffect(() => { budgetRef.current = budget }, [budget])
-
-  // Show welcome modal once when game starts
-  const prevStatusRef = useRef(null)
-  useEffect(() => {
-    if (status === 'playing' && prevStatusRef.current !== 'playing') {
-      setShowWelcome(true)
-    }
-    prevStatusRef.current = status
-  }, [status])
+  const [welcomeDismissed, setWelcomeDismissed] = useState(
+    () => !!sessionStorage.getItem(`welcomed_${initialRoom?.id}`)
+  )
 
   const isRH = myPlayer?.role === ROLES.GERENTE_RH
   const myObraId = myPlayer ? ROLE_TO_OBRA[myPlayer.role] : null
@@ -61,6 +48,20 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const budget = room?.budget ?? 300
   const status = room?.status
   const roundDuration = room?.round_duration || ROUND_DURATION_SECONDS
+
+  // Show welcome once per game session (after loading completes)
+  const showWelcome = status === 'playing' && !loading && !welcomeDismissed
+
+  function handleCloseWelcome() {
+    sessionStorage.setItem(`welcomed_${initialRoom?.id}`, '1')
+    setWelcomeDismissed(true)
+  }
+
+  // Refs to access latest state inside setTimeout callbacks
+  const obrasRef = useRef([])
+  const budgetRef = useRef(300)
+  useEffect(() => { obrasRef.current = obras }, [obras])
+  useEffect(() => { budgetRef.current = budget }, [budget])
 
   // Round timer
   const handleRoundExpire = useCallback(async () => {
@@ -390,7 +391,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
 
       {/* Welcome modal — shown once at game start */}
       {showWelcome && (
-        <WelcomeModal onClose={() => setShowWelcome(false)} />
+        <WelcomeModal onClose={handleCloseWelcome} />
       )}
 
       {/* Event alert overlay */}
