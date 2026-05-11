@@ -150,6 +150,24 @@ export default function EndScreen({ gameState, players, room, onRestart }) {
           </div>
         </div>
 
+        {/* The big reveal */}
+        <div className={`rounded-2xl p-5 mb-4 border-2 text-center
+          ${allAbove70 ? 'bg-green-950 border-green-500' : 'bg-indigo-900 border-yellow-500'}`}>
+          {allAbove70 ? (
+            <>
+              <p className="text-4xl mb-2">🤝</p>
+              <p className="text-yellow-400 font-black text-lg mb-2">¡Jugaron en equipo y ganaron todos!</p>
+              <p className="text-green-300 text-sm">Cuando nadie acapara el talento y todos colaboran, la empresa entera gana. Eso era el juego dentro del juego.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-3xl mb-2">💡</p>
+              <p className="text-yellow-400 font-black text-base mb-2">¿Sabías que TODOS podían ganar?</p>
+              <p className="text-indigo-200 text-sm leading-relaxed">Si cada obra hubiera alcanzado <span className="font-bold text-white">70% o más</span> de utilidad, la empresa entera ganaba. No era solo una competencia entre directores… era una colaboración disfrazada. La próxima vez, intenten coordinarse.</p>
+            </>
+          )}
+        </div>
+
         {/* Restart */}
         <button onClick={onRestart}
           className="w-full py-4 rounded-2xl bg-yellow-500 text-black font-black text-lg hover:bg-yellow-400 transition mb-8">

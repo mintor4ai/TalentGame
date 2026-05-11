@@ -17,6 +17,7 @@ import { ROLE_TO_OBRA, ROLES, ROUND_DURATION_SECONDS, MAX_ROUNDS, EXTERNAL_HIRE_
 import { EXTERNAL_TALENT_TEMPLATE, EVENTS_BY_ROUND, DIFFICULTY_EVENTS } from '../lib/gameData.js'
 import { supabase } from '../lib/supabase.js'
 import EventAlert from './EventAlert.jsx'
+import WelcomeModal from './WelcomeModal.jsx'
 import { playEventAlert } from '../lib/sounds.js'
 
 export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
@@ -34,6 +35,9 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const [proposalContext, setProposalContext] = useState(null)
   const [roundEnding, setRoundEnding] = useState(false)
   const [eventAlert, setEventAlert] = useState(null)
+  const [welcomeDismissed, setWelcomeDismissed] = useState(
+    () => !!sessionStorage.getItem(`welcomed_${initialRoom?.id}`)
+  )
 
   const isRH = myPlayer?.role === ROLES.GERENTE_RH
   const myObraId = myPlayer ? ROLE_TO_OBRA[myPlayer.role] : null
@@ -44,6 +48,20 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const budget = room?.budget ?? 300
   const status = room?.status
   const roundDuration = room?.round_duration || ROUND_DURATION_SECONDS
+
+  // Show welcome once per game session (after loading completes)
+  const showWelcome = status === 'playing' && !loading && !welcomeDismissed
+
+  function handleCloseWelcome() {
+    sessionStorage.setItem(`welcomed_${initialRoom?.id}`, '1')
+    setWelcomeDismissed(true)
+  }
+
+  // Refs to access latest state inside setTimeout callbacks
+  const obrasRef = useRef([])
+  const budgetRef = useRef(300)
+  useEffect(() => { obrasRef.current = obras }, [obras])
+  useEffect(() => { budgetRef.current = budget }, [budget])
 
   // Round timer
   const handleRoundExpire = useCallback(async () => {
@@ -255,9 +273,9 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
         return
       }
 
-      // Apply round events
+      // Schedule events staggered within the new round
       const difficulty = room?.difficulty || 2
-      await applyRoundEvents(nextRound, difficulty, obras)
+      scheduleRoundEvents(nextRound, difficulty)
 
       await updateRoom({ round: nextRound, budget: newBudget })
       await addLog(`⏭️ Ronda ${nextRound} iniciada. Presupuesto: $${newBudget}k`, 'event')
@@ -268,52 +286,46 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     }
   }
 
-  async function applyRoundEvents(nextRound, difficulty, currentObras) {
-    const events = EVENTS_BY_ROUND[nextRound] || []
-    let updatedObras = JSON.parse(JSON.stringify(currentObras))
-    let updatedBudget = budget
+  async function fireScheduledEvent(evt) {
+    await addLog(evt.message, evt.type)
 
-    for (const evt of events) {
-      if (evt.difficulty > difficulty) continue
-      await addLog(evt.message, evt.type)
-
-      if (evt.action?.type === 'clear_slot') {
-        updatedObras = updatedObras.map(o => {
-          if (o.id !== evt.action.obraId) return o
-          return {
-            ...o,
-            slots: o.slots.map(s => s.id === evt.action.slotId ? { ...s, personId: null } : s),
-          }
-        })
-      } else if (evt.action?.type === 'reduce_budget') {
-        updatedBudget -= evt.action.amount
-        await updateRoom({ budget: updatedBudget })
-      }
+    if (evt.action?.type === 'clear_slot') {
+      const current = JSON.parse(JSON.stringify(obrasRef.current))
+      const updated = current.map(o => {
+        if (o.id !== evt.action.obraId) return o
+        return { ...o, slots: o.slots.map(s => s.id === evt.action.slotId ? { ...s, personId: null } : s) }
+      })
+      await updateGameState({ obras: updated })
+    } else if (evt.action?.type === 'reduce_budget') {
+      await updateRoom({ budget: budgetRef.current - evt.action.amount })
+    } else if (evt.action?.type === 'covid_double') {
+      const current = JSON.parse(JSON.stringify(obrasRef.current))
+      const filled = current.flatMap(o => o.slots.filter(s => s.personId))
+      const toClear = filled.slice(0, 2).map(s => s.id)
+      const updated = current.map(o => ({
+        ...o,
+        slots: o.slots.map(s => toClear.includes(s.id) ? { ...s, personId: null } : s),
+      }))
+      await updateGameState({ obras: updated })
     }
+  }
 
+  function scheduleRoundEvents(nextRound, difficulty) {
+    const scripted = (EVENTS_BY_ROUND[nextRound] || []).filter(e => (e.difficulty || 1) <= difficulty)
     const diffEvents = DIFFICULTY_EVENTS[difficulty]?.[nextRound] || []
-    for (const evt of diffEvents) {
-      await addLog(evt.message, evt.type)
-      if (evt.action?.type === 'reduce_budget') {
-        updatedBudget -= evt.action.amount
-        await updateRoom({ budget: updatedBudget })
-      }
-      if (evt.action?.type === 'covid_double') {
-        // Clear two slots randomly
-        const slots = updatedObras.flatMap(o => o.slots.filter(s => s.personId))
-        const toClear = slots.slice(0, 2)
-        for (const slot of toClear) {
-          updatedObras = updatedObras.map(o => ({
-            ...o,
-            slots: o.slots.map(s => s.id === slot.id ? { ...s, personId: null } : s),
-          }))
-        }
-      }
-    }
+    const allEvents = [...scripted, ...diffEvents]
+    if (allEvents.length === 0) return
 
-    if (JSON.stringify(updatedObras) !== JSON.stringify(currentObras)) {
-      await updateGameState({ obras: updatedObras })
-    }
+    // Space events between 30-60s, scaled to round duration
+    const intervalMs = roundDuration >= 300 ? 50000
+      : roundDuration >= 180 ? 38000
+      : 28000
+
+    allEvents.forEach((evt, i) => {
+      const jitter = Math.random() * 15000
+      const delay = (i + 1) * (intervalMs + jitter)
+      setTimeout(() => fireScheduledEvent(evt), delay)
+    })
   }
 
   // Annotate talent with assigned obra name
@@ -375,6 +387,11 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
             'bg-indigo-800 border-indigo-600'}`}>
           <p className="text-sm font-semibold">{notification.msg}</p>
         </div>
+      )}
+
+      {/* Welcome modal — shown once at game start */}
+      {showWelcome && (
+        <WelcomeModal onClose={handleCloseWelcome} />
       )}
 
       {/* Event alert overlay */}
