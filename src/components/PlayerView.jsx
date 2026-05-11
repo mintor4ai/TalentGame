@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useGameState } from '../hooks/useGameState.js'
 import { useTimer } from '../hooks/useTimer.js'
 import ObraCard from './ObraCard.jsx'
