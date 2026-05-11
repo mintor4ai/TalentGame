@@ -16,6 +16,8 @@ import {
 import { ROLE_TO_OBRA, ROLES, ROUND_DURATION_SECONDS, MAX_ROUNDS, EXTERNAL_HIRE_COST, FORANEO_MOBILITY_COST, GAP_COST, LOG_TYPES } from '../lib/constants.js'
 import { EXTERNAL_TALENT_TEMPLATE, EVENTS_BY_ROUND, DIFFICULTY_EVENTS } from '../lib/gameData.js'
 import { supabase } from '../lib/supabase.js'
+import EventAlert from './EventAlert.jsx'
+import { playEventAlert } from '../lib/sounds.js'
 
 export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const {
@@ -31,6 +33,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const [notification, setNotification] = useState(null)
   const [proposalContext, setProposalContext] = useState(null)
   const [roundEnding, setRoundEnding] = useState(false)
+  const [eventAlert, setEventAlert] = useState(null)
 
   const isRH = myPlayer?.role === ROLES.GERENTE_RH
   const myObraId = myPlayer ? ROLE_TO_OBRA[myPlayer.role] : null
@@ -40,6 +43,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const round = room?.round || 1
   const budget = room?.budget ?? 300
   const status = room?.status
+  const roundDuration = room?.round_duration || ROUND_DURATION_SECONDS
 
   // Round timer
   const handleRoundExpire = useCallback(async () => {
@@ -49,11 +53,11 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   }, [myPlayer?.is_host, roundEnding, round])
 
   const { seconds: roundSeconds, start: startRound, reset: resetRound } = useTimer(
-    ROUND_DURATION_SECONDS, handleRoundExpire
+    roundDuration, handleRoundExpire
   )
 
   useEffect(() => {
-    if (status === 'playing') startRound(ROUND_DURATION_SECONDS)
+    if (status === 'playing') startRound(roundDuration)
   }, [status])
 
   // Show toast notification
@@ -75,7 +79,13 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     const latest = logEntries[logEntries.length - 1]
     if (!latest) return
     const sinceLastSecond = Date.now() - new Date(latest.created_at).getTime() < 3000
-    if (sinceLastSecond) showNotification(latest.message, latest.type)
+    if (sinceLastSecond) {
+      showNotification(latest.message, latest.type)
+      if (latest.type === 'event' || latest.type === 'bad') {
+        setEventAlert(latest)
+        playEventAlert()
+      }
+    }
   }, [logEntries.length])
 
   // Select person
@@ -251,8 +261,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
 
       await updateRoom({ round: nextRound, budget: newBudget })
       await addLog(`⏭️ Ronda ${nextRound} iniciada. Presupuesto: $${newBudget}k`, 'event')
-      resetRound(ROUND_DURATION_SECONDS)
-      startRound(ROUND_DURATION_SECONDS)
+      resetRound(roundDuration)
+      startRound(roundDuration)
     } finally {
       setRoundEnding(false)
     }
@@ -365,6 +375,11 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
             'bg-indigo-800 border-indigo-600'}`}>
           <p className="text-sm font-semibold">{notification.msg}</p>
         </div>
+      )}
+
+      {/* Event alert overlay */}
+      {eventAlert && (
+        <EventAlert event={eventAlert} onDismiss={() => setEventAlert(null)} />
       )}
 
       {/* VetoDialog overlay */}

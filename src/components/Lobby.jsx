@@ -19,6 +19,7 @@ export default function Lobby({ onGameStart }) {
   const [joinCode, setJoinCode] = useState('')
   const [difficulty, setDifficulty] = useState(2)
   const [rhMode, setRhMode] = useState('player')
+  const [roundDuration, setRoundDuration] = useState(300)
   const [roomData, setRoomData] = useState(null)
   const [players, setPlayers] = useState([])
   const [myPlayerId, setMyPlayerId] = useState(null)
@@ -57,7 +58,7 @@ export default function Lobby({ onGameStart }) {
 
       const { data: room, error: roomErr } = await supabase
         .from('game_rooms')
-        .insert({ code, host_id: hostId, difficulty, rh_mode: rhMode })
+        .insert({ code, host_id: hostId, difficulty, rh_mode: rhMode, round_duration: roundDuration })
         .select().single()
       if (roomErr) throw roomErr
 
@@ -309,6 +310,17 @@ export default function Lobby({ onGameStart }) {
                       <button key={d} onClick={() => setDifficulty(d)}
                         className={`flex-1 py-2 rounded-xl font-semibold text-sm transition ${difficulty === d ? 'bg-yellow-500 text-black' : 'bg-indigo-800 hover:bg-indigo-700'}`}>
                         {DIFFICULTY_LABELS[d]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm text-indigo-300 mb-2">Duración por ronda</label>
+                  <div className="flex gap-2">
+                    {[[120, '2 min'], [180, '3 min'], [300, '5 min']].map(([val, label]) => (
+                      <button key={val} onClick={() => setRoundDuration(val)}
+                        className={`flex-1 py-2 rounded-xl font-semibold text-sm transition ${roundDuration === val ? 'bg-yellow-500 text-black' : 'bg-indigo-800 hover:bg-indigo-700'}`}>
+                        {label}
                       </button>
                     ))}
                   </div>
