@@ -16,8 +16,10 @@ import {
 import { ROLE_TO_OBRA, ROLES, ROUND_DURATION_SECONDS, MAX_ROUNDS, EXTERNAL_HIRE_COST, FORANEO_MOBILITY_COST, GAP_COST, LOG_TYPES } from '../lib/constants.js'
 import { EXTERNAL_TALENT_TEMPLATE, EVENTS_BY_ROUND, DIFFICULTY_EVENTS } from '../lib/gameData.js'
 import { supabase } from '../lib/supabase.js'
+import EventAlert from './EventAlert.jsx'
+import { playEventAlert } from '../lib/sounds.js'
 
-export default function PlayerView({ room: initialRoom, playerId }) {
+export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const {
     room, players, gameState, proposals, logEntries, loading, error,
     myPlayer, pendingProposal,
@@ -31,6 +33,7 @@ export default function PlayerView({ room: initialRoom, playerId }) {
   const [notification, setNotification] = useState(null)
   const [proposalContext, setProposalContext] = useState(null)
   const [roundEnding, setRoundEnding] = useState(false)
+  const [eventAlert, setEventAlert] = useState(null)
 
   const isRH = myPlayer?.role === ROLES.GERENTE_RH
   const myObraId = myPlayer ? ROLE_TO_OBRA[myPlayer.role] : null
@@ -40,6 +43,7 @@ export default function PlayerView({ room: initialRoom, playerId }) {
   const round = room?.round || 1
   const budget = room?.budget ?? 300
   const status = room?.status
+  const roundDuration = room?.round_duration || ROUND_DURATION_SECONDS
 
   // Round timer
   const handleRoundExpire = useCallback(async () => {
@@ -49,11 +53,11 @@ export default function PlayerView({ room: initialRoom, playerId }) {
   }, [myPlayer?.is_host, roundEnding, round])
 
   const { seconds: roundSeconds, start: startRound, reset: resetRound } = useTimer(
-    ROUND_DURATION_SECONDS, handleRoundExpire
+    roundDuration, handleRoundExpire
   )
 
   useEffect(() => {
-    if (status === 'playing') startRound(ROUND_DURATION_SECONDS)
+    if (status === 'playing') startRound(roundDuration)
   }, [status])
 
   // Show toast notification
@@ -75,7 +79,13 @@ export default function PlayerView({ room: initialRoom, playerId }) {
     const latest = logEntries[logEntries.length - 1]
     if (!latest) return
     const sinceLastSecond = Date.now() - new Date(latest.created_at).getTime() < 3000
-    if (sinceLastSecond) showNotification(latest.message, latest.type)
+    if (sinceLastSecond) {
+      showNotification(latest.message, latest.type)
+      if (latest.type === 'event' || latest.type === 'bad') {
+        setEventAlert(latest)
+        playEventAlert()
+      }
+    }
   }, [logEntries.length])
 
   // Select person
@@ -251,8 +261,8 @@ export default function PlayerView({ room: initialRoom, playerId }) {
 
       await updateRoom({ round: nextRound, budget: newBudget })
       await addLog(`⏭️ Ronda ${nextRound} iniciada. Presupuesto: $${newBudget}k`, 'event')
-      resetRound(ROUND_DURATION_SECONDS)
-      startRound(ROUND_DURATION_SECONDS)
+      resetRound(roundDuration)
+      startRound(roundDuration)
     } finally {
       setRoundEnding(false)
     }
@@ -336,8 +346,19 @@ export default function PlayerView({ room: initialRoom, playerId }) {
     )
   }
 
+  async function handleLeave() {
+    if (playerId) {
+      await supabase.from('game_players').delete().eq('id', playerId)
+    }
+    sessionStorage.removeItem('gameSession')
+    sessionStorage.removeItem('playerId')
+    sessionStorage.removeItem('roomData')
+    if (onRestart) onRestart()
+    else window.location.href = '/'
+  }
+
   if (status === 'ended') {
-    return <EndScreen gameState={gameState} players={players} room={room} onRestart={() => window.location.href = '/'} />
+    return <EndScreen gameState={gameState} players={players} room={room} onRestart={handleLeave} />
   }
 
   return (
@@ -354,6 +375,11 @@ export default function PlayerView({ room: initialRoom, playerId }) {
             'bg-indigo-800 border-indigo-600'}`}>
           <p className="text-sm font-semibold">{notification.msg}</p>
         </div>
+      )}
+
+      {/* Event alert overlay */}
+      {eventAlert && (
+        <EventAlert event={eventAlert} onDismiss={() => setEventAlert(null)} />
       )}
 
       {/* VetoDialog overlay */}
@@ -395,6 +421,10 @@ export default function PlayerView({ room: initialRoom, playerId }) {
                 ⏭️ Fin ronda
               </button>
             )}
+            <button onClick={handleLeave}
+              className="bg-indigo-700 text-indigo-300 px-2 py-1 rounded-lg font-bold text-xs hover:bg-red-800 hover:text-white transition">
+              🚪 Salir
+            </button>
           </div>
         </div>
       </div>
