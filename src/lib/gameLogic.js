@@ -213,5 +213,5 @@ export function generateRoomCode() {
 }
 
 export function generatePlayerId() {
-  return 'p_' + Math.random().toString(36).substr(2, 9)
+  return crypto.randomUUID()
 }
