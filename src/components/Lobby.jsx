@@ -143,6 +143,19 @@ export default function Lobby({ onGameStart }) {
     await supabase.from('game_players').update({ is_ready: newReady }).eq('id', myPlayerId)
   }
 
+  async function handleLeaveRoom() {
+    if (myPlayerId) {
+      await supabase.from('game_players').delete().eq('id', myPlayerId)
+    }
+    setScreen('home')
+    setRoomData(null)
+    setPlayers([])
+    setMyPlayerId(null)
+    setSelectedRole(null)
+    setPlayerName('')
+    setError('')
+  }
+
   function copyLink() {
     const url = `${window.location.origin}/join/${roomData?.code}`
     navigator.clipboard.writeText(url).then(() => {
@@ -206,6 +219,10 @@ export default function Lobby({ onGameStart }) {
                 {loading ? 'Iniciando...' : '🚀 Iniciar Partida'}
               </button>
             )}
+            <button onClick={handleLeaveRoom}
+              className="w-full py-3 rounded-2xl font-semibold text-sm bg-indigo-800 text-indigo-300 hover:bg-red-900 hover:text-white transition">
+              🚪 Abandonar sala
+            </button>
           </div>
 
           <p className="text-center text-xs text-indigo-400 mt-4">

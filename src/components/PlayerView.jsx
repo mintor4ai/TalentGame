@@ -17,7 +17,7 @@ import { ROLE_TO_OBRA, ROLES, ROUND_DURATION_SECONDS, MAX_ROUNDS, EXTERNAL_HIRE_
 import { EXTERNAL_TALENT_TEMPLATE, EVENTS_BY_ROUND, DIFFICULTY_EVENTS } from '../lib/gameData.js'
 import { supabase } from '../lib/supabase.js'
 
-export default function PlayerView({ room: initialRoom, playerId }) {
+export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const {
     room, players, gameState, proposals, logEntries, loading, error,
     myPlayer, pendingProposal,
@@ -336,8 +336,19 @@ export default function PlayerView({ room: initialRoom, playerId }) {
     )
   }
 
+  async function handleLeave() {
+    if (playerId) {
+      await supabase.from('game_players').delete().eq('id', playerId)
+    }
+    sessionStorage.removeItem('gameSession')
+    sessionStorage.removeItem('playerId')
+    sessionStorage.removeItem('roomData')
+    if (onRestart) onRestart()
+    else window.location.href = '/'
+  }
+
   if (status === 'ended') {
-    return <EndScreen gameState={gameState} players={players} room={room} onRestart={() => window.location.href = '/'} />
+    return <EndScreen gameState={gameState} players={players} room={room} onRestart={handleLeave} />
   }
 
   return (
@@ -395,6 +406,10 @@ export default function PlayerView({ room: initialRoom, playerId }) {
                 ⏭️ Fin ronda
               </button>
             )}
+            <button onClick={handleLeave}
+              className="bg-indigo-700 text-indigo-300 px-2 py-1 rounded-lg font-bold text-xs hover:bg-red-800 hover:text-white transition">
+              🚪 Salir
+            </button>
           </div>
         </div>
       </div>
