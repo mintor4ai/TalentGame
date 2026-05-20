@@ -15,7 +15,7 @@ function explainScore(person) {
   return reasons
 }
 
-export default function EndScreen({ gameState, players, room, onRestart }) {
+export default function EndScreen({ gameState, players, room, onRestart, proposals = [], logEntries = [] }) {
   if (!gameState) return null
 
   const obras = gameState.obras || []
@@ -34,6 +34,12 @@ export default function EndScreen({ gameState, players, room, onRestart }) {
   const spent = initialBudget - budget
   const sortedUtils = [...utilidades].sort((a, b) => b.utilidad - a.utilidad)
   const winner = sortedUtils[0]
+
+  // Datos para tarjeta de aprendizajes
+  const transfers = (gameState.transfers || []).length
+  const vetos = proposals.filter(p => ['vetoed', 'kept', 'terminated'].includes(p.status)).length
+  const terminations = proposals.filter(p => p.status === 'terminated').length
+  const emptySlots = obras.reduce((count, obra) => count + obra.slots.filter(s => !s.personId).length, 0)
 
   const winnerPlayer = players?.find(p => {
     const obraMap = { o1: 'Director Torre Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }
@@ -233,6 +239,53 @@ export default function EndScreen({ gameState, players, room, onRestart }) {
               <p className="text-indigo-200 text-sm leading-relaxed">Si cada obra hubiera alcanzado <span className="font-bold text-white">70% o más</span> de utilidad, la empresa entera ganaba. No era solo una competencia entre directores… era una colaboración disfrazada. La próxima vez, intenten coordinarse.</p>
             </>
           )}
+        </div>
+
+        {/* Tarjeta de aprendizajes grupales */}
+        <div className="bg-indigo-900 rounded-2xl p-4 mb-4 border border-yellow-600">
+          <h2 className="font-bold text-sm text-yellow-400 mb-3">📋 APRENDIZAJES DEL EQUIPO</h2>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="bg-indigo-800 rounded-xl p-3 text-center">
+              <p className="text-2xl font-black text-blue-400">{transfers}</p>
+              <p className="text-xs text-indigo-400">Movimientos realizados</p>
+            </div>
+            <div className="bg-indigo-800 rounded-xl p-3 text-center">
+              <p className="text-2xl font-black text-orange-400">{vetos}</p>
+              <p className="text-xs text-indigo-400">Vetos ejercidos</p>
+            </div>
+            <div className="bg-indigo-800 rounded-xl p-3 text-center">
+              <p className="text-2xl font-black text-red-400">{terminations}</p>
+              <p className="text-xs text-indigo-400">Terminaciones con riesgo</p>
+            </div>
+            <div className="bg-indigo-800 rounded-xl p-3 text-center">
+              <p className="text-2xl font-black text-yellow-400">{emptySlots}</p>
+              <p className="text-xs text-indigo-400">Slots vacíos al final</p>
+            </div>
+          </div>
+          <div className="bg-indigo-800 rounded-xl p-3 text-center mb-4">
+            <p className="text-xs text-indigo-400">Presupuesto gastado</p>
+            <p className="text-2xl font-black text-orange-400">${spent}k</p>
+          </div>
+          <div className="space-y-2">
+            {emptySlots > 2 && (
+              <p className="text-xs text-yellow-300 bg-yellow-950/40 rounded-lg px-3 py-2">
+                ⚠️ Quedaron {emptySlots} slots sin cubrir — cada uno costó $8k por ronda
+              </p>
+            )}
+            {terminations > 0 && (
+              <p className="text-xs text-red-300 bg-red-950/40 rounded-lg px-3 py-2">
+                ⚖️ Se terminaron {terminations} colaborador{terminations > 1 ? 'es' : ''} con riesgo de demanda — la liquidación sale más cara que retenerlos
+              </p>
+            )}
+            {transfers > 6 && (
+              <p className="text-xs text-blue-300 bg-blue-950/40 rounded-lg px-3 py-2">
+                🤝 El equipo hizo {transfers} movimientos — alta colaboración entre obras
+              </p>
+            )}
+            <p className="text-xs text-indigo-300 bg-indigo-800/60 rounded-lg px-3 py-2">
+              💡 La próxima vez: el talento ocioso es el enemigo silencioso. Cada persona sin asignar le cobra a todos.
+            </p>
+          </div>
         </div>
 
         {/* Restart */}
