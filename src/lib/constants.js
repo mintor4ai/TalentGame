@@ -1,5 +1,5 @@
 export const ROLES = {
-  DIRECTOR_TORRE: 'Director Torre Altara',
+  DIRECTOR_TORRE: 'Director Nave Industrial Altara',
   DIRECTOR_PUENTE: 'Director Puente Río Norte',
   DIRECTOR_DC: 'Director Data Center Nube9',
   GERENTE_RH: 'Gerente de RH',

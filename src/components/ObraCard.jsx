@@ -12,7 +12,7 @@ const OBRA_COLORS = {
 
 export default function ObraCard({
   obra, allTalent, selectedPerson, compatibleSlots = [],
-  onSlotClick, myObra, frozen, compact = false
+  onSlotClick, onUnassign, canUnassign, myObra, frozen, compact = false
 }) {
   const colors = OBRA_COLORS[obra.color] || OBRA_COLORS.blue
   const utilidad = calcObraUtilidad(obra, allTalent)
@@ -114,6 +114,14 @@ export default function ObraCard({
                     </div>
                   </div>
                   <span className="text-xs text-green-400 font-bold flex-shrink-0">${person.salary}k</span>
+                  {canUnassign && !selectedPerson && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onUnassign?.(person.id) }}
+                      className="text-gray-500 hover:text-red-400 transition text-lg font-black leading-none flex-shrink-0 px-1"
+                      title="Desasignar al pool">
+                      ✕
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className={`flex items-center gap-2 ${compat ? 'text-green-400' : 'text-gray-500'}`}>
