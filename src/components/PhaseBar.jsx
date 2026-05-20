@@ -1,6 +1,6 @@
-import { MAX_ROUNDS, ROUND_DURATION_SECONDS } from '../lib/constants.js'
+import { ROUND_DURATION_SECONDS } from '../lib/constants.js'
 
-export default function PhaseBar({ round, secondsLeft, budget }) {
+export default function PhaseBar({ round, secondsLeft, budget, maxRounds = 3 }) {
   const timerColor = secondsLeft > 60 ? 'text-green-400'
     : secondsLeft > 30 ? 'text-yellow-400' : 'text-red-500'
   const timerBlink = secondsLeft <= 30 ? 'animate-[blink-red_0.5s_ease-in-out_infinite]' : ''
@@ -15,7 +15,7 @@ export default function PhaseBar({ round, secondsLeft, budget }) {
       <div className="flex items-center justify-between max-w-lg mx-auto">
         <div className="flex items-center gap-2">
           <span className="text-xs text-indigo-400">Ronda</span>
-          <span className="font-black text-white">{round}/{MAX_ROUNDS}</span>
+          <span className="font-black text-white">{round}/{maxRounds}</span>
         </div>
 
         <div className="flex-1 mx-3">

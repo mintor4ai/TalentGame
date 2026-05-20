@@ -197,7 +197,7 @@ export function determineWinner(obras, allTalent, players) {
   const sorted = [...utilidades].sort((a, b) => b.utilidad - a.utilidad)
   const winnerId = sorted[0].obraId
 
-  const winnerRole = { o1: 'Director Torre Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }[winnerId]
+  const winnerRole = { o1: 'Director Nave Industrial Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }[winnerId]
   const winnerPlayer = players?.find(p => p.role === winnerRole)
 
   return { type: 'single_win', utilidades, winnerId, winnerPlayer }

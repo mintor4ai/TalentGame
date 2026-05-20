@@ -94,9 +94,9 @@ export const EXTERNAL_TALENT_TEMPLATE = {
 export const OBRAS = [
   {
     id: 'o1',
-    name: 'Torre Altara',
-    emoji: '🏢',
-    type: 'edificio',
+    name: 'Nave Industrial Altara',
+    emoji: '🏗️',
+    type: 'industrial',
     color: 'blue',
     slots: [
       { id: 's1', role: 'Superintendente', tier: 'critical', personId: null },
@@ -134,7 +134,9 @@ export const OBRAS = [
 export const EVENTS_BY_ROUND = {
   2: [
     {
-      message: '⚡ EVENTO: Torre Altara se retrasa 3 semanas. El Superintendente fue reasignado.',
+      message: '⚡ Retraso en Nave Industrial Altara',
+      detail: 'El cliente exigió cambios de último minuto. El Superintendente fue reasignado de emergencia a reuniones con el despacho de arquitectos.',
+      impactLabel: 'Slot crítico de Superintendente liberado — sin él, la obra pierde coordinación y el costo por hueco empieza a correr.',
       type: 'event',
       action: { type: 'clear_slot', obraId: 'o1', slotId: 's1' },
       difficulty: 1,
@@ -142,7 +144,9 @@ export const EVENTS_BY_ROUND = {
   ],
   3: [
     {
-      message: '⚡ EVENTO: Baja médica en Puente Río Norte. El Jefe de Obra está incapacitado.',
+      message: '⚡ Baja médica en Puente Río Norte',
+      detail: 'El Jefe de Obra fue diagnosticado con COVID y entra en aislamiento obligatorio de 14 días.',
+      impactLabel: 'Slot alto de Jefe de Obra vacío — además de perder supervisión directa, su sueldo se sigue pagando durante la baja.',
       type: 'event',
       action: { type: 'clear_slot', obraId: 'o2', slotId: 's5' },
       difficulty: 2,
@@ -154,14 +158,18 @@ export const DIFFICULTY_EVENTS = {
   3: {
     1: [
       {
-        message: '⚡ EVENTO: La DG prometió nueva obra sin presupuesto. Presupuesto -$30k.',
+        message: '⚡ Promesa sin presupuesto',
+        detail: 'La Dirección General prometió iniciar otra obra sin liberar recursos. Se redirigen $30k del presupuesto actual.',
+        impactLabel: 'Presupuesto reducido en $30k. Cada decisión cuenta más ahora.',
         type: 'bad',
         action: { type: 'reduce_budget', amount: 30 },
       },
     ],
     3: [
       {
-        message: '⚡ EVENTO: COVID doble — 2 colaboradores positivos. 2 slots vacíos simultáneos.',
+        message: '⚡ Brote de COVID — doble baja',
+        detail: 'Dos colaboradores dieron positivo en prueba rápida. Protocolo sanitario obliga aislamiento inmediato.',
+        impactLabel: '2 slots quedan vacíos simultáneamente. El costo por hueco se duplica — actúen rápido.',
         type: 'bad',
         action: { type: 'covid_double' },
       },

@@ -2,7 +2,7 @@ import { calcAllUtilidades, calcOptimalAssignment, calcRoundCosts } from '../lib
 import { OBRAS } from '../lib/gameData.js'
 
 const OBRA_EMOJIS = { o1: '🏢', o2: '🌉', o3: '🖥️' }
-const OBRA_NAMES = { o1: 'Torre Altara', o2: 'Puente Río Norte', o3: 'Data Center Nube9' }
+const OBRA_NAMES = { o1: 'Nave Industrial Altara', o2: 'Puente Río Norte', o3: 'Data Center Nube9' }
 
 export default function EndScreen({ gameState, players, room, onRestart }) {
   if (!gameState) return null
@@ -58,7 +58,7 @@ export default function EndScreen({ gameState, players, room, onRestart }) {
             {sortedUtils.map(({ obraId, utilidad }, i) => {
               const obra = obras.find(o => o.id === obraId)
               const obraPlayer = players?.find(p => {
-                const map = { o1: 'Director Torre Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }
+                const map = { o1: 'Director Nave Industrial Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }
                 return p.role === map[obraId]
               })
               const medal = ['🥇', '🥈', '🥉'][i] || '🏅'

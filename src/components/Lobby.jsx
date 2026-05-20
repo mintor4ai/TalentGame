@@ -20,6 +20,7 @@ export default function Lobby({ onGameStart }) {
   const [difficulty, setDifficulty] = useState(2)
   const [rhMode, setRhMode] = useState('player')
   const [roundDuration, setRoundDuration] = useState(300)
+  const [maxRounds, setMaxRounds] = useState(3)
   const [roomData, setRoomData] = useState(null)
   const [players, setPlayers] = useState([])
   const [myPlayerId, setMyPlayerId] = useState(null)
@@ -58,7 +59,7 @@ export default function Lobby({ onGameStart }) {
 
       const { data: room, error: roomErr } = await supabase
         .from('game_rooms')
-        .insert({ code, host_id: hostId, difficulty, rh_mode: rhMode, round_duration: roundDuration })
+        .insert({ code, host_id: hostId, difficulty, rh_mode: rhMode, round_duration: roundDuration, max_rounds: maxRounds })
         .select().single()
       if (roomErr) throw roomErr
 
@@ -311,6 +312,17 @@ export default function Lobby({ onGameStart }) {
                       <button key={d} onClick={() => setDifficulty(d)}
                         className={`flex-1 py-2 rounded-xl font-semibold text-sm transition ${difficulty === d ? 'bg-yellow-500 text-black' : 'bg-indigo-800 hover:bg-indigo-700'}`}>
                         {DIFFICULTY_LABELS[d]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm text-indigo-300 mb-2">Número de rondas</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4].map(n => (
+                      <button key={n} onClick={() => setMaxRounds(n)}
+                        className={`flex-1 py-2 rounded-xl font-semibold text-sm transition ${maxRounds === n ? 'bg-yellow-500 text-black' : 'bg-indigo-800 hover:bg-indigo-700'}`}>
+                        {n} {n === 3 ? '(def)' : ''}
                       </button>
                     ))}
                   </div>

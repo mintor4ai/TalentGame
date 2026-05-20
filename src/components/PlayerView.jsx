@@ -18,6 +18,7 @@ import { EXTERNAL_TALENT_TEMPLATE, EVENTS_BY_ROUND, DIFFICULTY_EVENTS } from '..
 import { supabase } from '../lib/supabase.js'
 import EventAlert from './EventAlert.jsx'
 import WelcomeModal from './WelcomeModal.jsx'
+import VetoResultDialog from './VetoResultDialog.jsx'
 import { playEventAlert } from '../lib/sounds.js'
 
 export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
@@ -48,6 +49,15 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const budget = room?.budget ?? 300
   const status = room?.status
   const roundDuration = room?.round_duration || ROUND_DURATION_SECONDS
+  const maxRounds = room?.max_rounds || 3
+
+  // Veto result — proposer sees this when their proposal is vetoed
+  const myVetoedProposal = proposals.find(
+    p => p.proposer_id === myPlayer?.id && p.status === 'vetoed'
+  )
+  const vetoedPerson = myVetoedProposal
+    ? allTalent.find(t => t.id === myVetoedProposal.person_id)
+    : null
 
   // Show welcome once per game session (after loading completes)
   const showWelcome = status === 'playing' && !loading && !welcomeDismissed
@@ -60,8 +70,10 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   // Refs to access latest state inside setTimeout callbacks
   const obrasRef = useRef([])
   const budgetRef = useRef(300)
+  const allTalentRef = useRef([])
   useEffect(() => { obrasRef.current = obras }, [obras])
   useEffect(() => { budgetRef.current = budget }, [budget])
+  useEffect(() => { allTalentRef.current = allTalent }, [allTalent])
 
   // Round timer
   const handleRoundExpire = useCallback(async () => {
@@ -266,7 +278,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
 
       const nextRound = round + 1
 
-      if (nextRound > MAX_ROUNDS) {
+      if (nextRound > maxRounds) {
         // Game over
         await updateRoom({ status: 'ended', budget: newBudget })
         await addLog('🏁 ¡Partida terminada! Calculando resultados...', 'event')
@@ -287,6 +299,22 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   }
 
   async function fireScheduledEvent(evt) {
+    // Look up who is in the affected slot to enrich the alert
+    let enriched = { ...evt }
+    if (evt.action?.type === 'clear_slot') {
+      const obra = obrasRef.current.find(o => o.id === evt.action.obraId)
+      const slot = obra?.slots.find(s => s.id === evt.action.slotId)
+      if (slot?.personId) {
+        const person = allTalentRef.current.find(t => t.id === slot.personId)
+        if (person) {
+          enriched.personName = person.name
+          enriched.personSalary = person.salary
+        }
+      }
+    }
+
+    setEventAlert(enriched)
+    playEventAlert()
     await addLog(evt.message, evt.type)
 
     if (evt.action?.type === 'clear_slot') {
@@ -307,6 +335,47 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
         slots: o.slots.map(s => toClear.includes(s.id) ? { ...s, personId: null } : s),
       }))
       await updateGameState({ obras: updated })
+    }
+  }
+
+  async function handleUnassign(personId) {
+    const person = allTalent.find(t => t.id === personId)
+    const newObras = removePersonFromObras(obras, personId)
+    await updateGameState({ obras: newObras })
+    await addLog(`↩️ ${myPlayer.player_name} desasignó a ${person?.name || '?'} — vuelve al pool`, 'info')
+  }
+
+  async function handleKeepAfterVeto(proposalId) {
+    await supabase.from('transfer_proposals').update({ status: 'kept' }).eq('id', proposalId)
+    await addLog(`🏠 ${myPlayer.player_name} decidió mantener a ${vetoedPerson?.name} en su obra (ocioso)`, 'warn')
+  }
+
+  async function handleTerminateAfterVeto(proposalId, person) {
+    const liquidacion = person.salary * 2
+    const hasDemanda = Math.random() < (person.actas > 0 ? 0.6 : 0.25)
+    const demandaCosto = hasDemanda ? 30 : 0
+    const totalCosto = liquidacion + demandaCosto
+
+    const newObras = removePersonFromObras(obras, person.id)
+    const newTalent = (gameState.talent || []).filter(t => t.id !== person.id)
+    const newExtraTalent = (gameState.extra_talent || []).filter(t => t.id !== person.id)
+
+    await updateGameState({ obras: newObras, talent: newTalent, extra_talent: newExtraTalent })
+    await updateRoom({ budget: budget - totalCosto })
+    await supabase.from('transfer_proposals').update({ status: 'terminated' }).eq('id', proposalId)
+
+    let msg = `🚪 ${myPlayer.player_name} terminó a ${person.name}. Liquidación: -$${liquidacion}k`
+    if (hasDemanda) msg += ` ⚖️ ¡DEMANDA! Costo adicional: -$${demandaCosto}k`
+    await addLog(msg, 'bad')
+
+    if (hasDemanda) {
+      setEventAlert({
+        type: 'bad',
+        message: `⚖️ ¡Demanda laboral de ${person.name}!`,
+        detail: `${person.name} interpuso una demanda por despido injustificado${person.actas > 0 ? ' — sus actas no fueron suficiente defensa legal' : ''}.`,
+        impactLabel: `Costo adicional: -$${demandaCosto}k. Total pagado: -$${totalCosto}k`,
+      })
+      playEventAlert()
     }
   }
 
@@ -376,7 +445,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   return (
     <div className="min-h-screen bg-indigo-950 text-white flex flex-col">
       {/* Phase bar */}
-      <PhaseBar round={round} secondsLeft={roundSeconds} budget={budget} />
+      <PhaseBar round={round} secondsLeft={roundSeconds} budget={budget} maxRounds={maxRounds} />
 
       {/* Toast notification */}
       {notification && (
@@ -397,6 +466,16 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       {/* Event alert overlay */}
       {eventAlert && (
         <EventAlert event={eventAlert} onDismiss={() => setEventAlert(null)} />
+      )}
+
+      {/* Veto result — proposer decides what to do after veto */}
+      {myVetoedProposal && vetoedPerson && (
+        <VetoResultDialog
+          proposal={myVetoedProposal}
+          person={vetoedPerson}
+          onKeep={handleKeepAfterVeto}
+          onTerminate={handleTerminateAfterVeto}
+        />
       )}
 
       {/* VetoDialog overlay */}
@@ -481,6 +560,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
                     selectedPerson={selectedPerson}
                     compatibleSlots={compatibleSlots.filter(cs => cs.obraId === obra.id)}
                     onSlotClick={handleSlotClick}
+                    onUnassign={handleUnassign}
+                    canUnassign={true}
                     myObra={false} />
                 ))}
               </>
@@ -495,6 +576,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
                         selectedPerson={selectedPerson}
                         compatibleSlots={compatibleSlots.filter(cs => cs.obraId === obra.id)}
                         onSlotClick={handleSlotClick}
+                        onUnassign={handleUnassign}
+                        canUnassign={true}
                         myObra />
                     ))}
                     {obras.some(o => o.id !== myObraId) && (
