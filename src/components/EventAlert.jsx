@@ -1,23 +1,11 @@
-import { useEffect, useState } from 'react'
-
-const ALERT_DURATION = 6000
+import { useEffect } from 'react'
 
 export default function EventAlert({ event, onDismiss }) {
-  const [progress, setProgress] = useState(100)
-
+  // Prevent scrolling while alert is shown
   useEffect(() => {
-    const start = Date.now()
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - start
-      const remaining = Math.max(0, 100 - (elapsed / ALERT_DURATION) * 100)
-      setProgress(remaining)
-      if (remaining === 0) {
-        clearInterval(interval)
-        onDismiss()
-      }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [event, onDismiss])
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
 
   if (!event) return null
 
@@ -64,20 +52,15 @@ export default function EventAlert({ event, onDismiss }) {
           </div>
         )}
 
-        {/* Dismiss */}
-        <div className="px-6 pb-5 text-center">
+        {/* Dismiss — mandatory, no auto-close */}
+        <div className="px-6 pb-6 text-center">
           <button
             onClick={onDismiss}
-            className={`px-8 py-3 rounded-2xl font-black text-sm transition active:scale-95
+            className={`w-full py-4 rounded-2xl font-black text-base transition active:scale-95
               ${isBad ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-yellow-500 hover:bg-yellow-400 text-black'}`}>
-            Entendido
+            ✅ Enterado — continuar
           </button>
-          <div className="mt-4 h-1.5 bg-black/40 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full ${isBad ? 'bg-red-400' : 'bg-yellow-400'}`}
-              style={{ width: `${progress}%`, transition: 'width 50ms linear' }}
-            />
-          </div>
+          <p className="text-xs text-indigo-400 mt-2">El juego sigue corriendo mientras lees esto</p>
         </div>
       </div>
     </div>

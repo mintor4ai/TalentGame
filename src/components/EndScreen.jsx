@@ -1,8 +1,19 @@
-import { calcAllUtilidades, calcOptimalAssignment, calcRoundCosts } from '../lib/gameLogic.js'
-import { OBRAS } from '../lib/gameData.js'
+import { calcAllUtilidades, calcOptimalAssignment, calcSlotScore } from '../lib/gameLogic.js'
 
-const OBRA_EMOJIS = { o1: '🏢', o2: '🌉', o3: '🖥️' }
+const OBRA_EMOJIS = { o1: '🏗️', o2: '🌉', o3: '🖥️' }
 const OBRA_NAMES = { o1: 'Nave Industrial Altara', o2: 'Puente Río Norte', o3: 'Data Center Nube9' }
+const TIER_PTS = { critical: 20, high: 12, medium: 6 }
+
+function explainScore(person) {
+  const reasons = []
+  if (person.level === 'senior') reasons.push('✅ Senior +8pts')
+  else reasons.push('⚪ Junior (sin bonus)')
+  if (person.foraneo) reasons.push('✈️ Foráneo -3pts')
+  if (person.actas > 0) reasons.push(`⚠️ ${person.actas} acta(s) -${person.actas * 4}pts`)
+  if (person.stats.actitud < 70) reasons.push(`😤 Actitud ${person.stats.actitud} -5pts`)
+  if (person.stats.calidad > 80) reasons.push(`📊 Calidad ${person.stats.calidad} +${((person.stats.calidad - 50) / 10).toFixed(1)}pts`)
+  return reasons
+}
 
 export default function EndScreen({ gameState, players, room, onRestart }) {
   if (!gameState) return null
@@ -147,6 +158,62 @@ export default function EndScreen({ gameState, players, room, onRestart }) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Cost explanation */}
+        <div className="bg-indigo-900 rounded-2xl p-4 mb-4 border border-indigo-700">
+          <h2 className="font-bold text-sm text-indigo-300 mb-3">💸 ¿QUÉ PASÓ CON EL PRESUPUESTO?</h2>
+          <div className="flex justify-between mb-3">
+            <div className="text-center">
+              <p className="text-2xl font-black text-green-400">${budget}k</p>
+              <p className="text-xs text-indigo-400">restante</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-black text-red-400">-${spent}k</p>
+              <p className="text-xs text-indigo-400">gastado en {room?.max_rounds || 3} rondas</p>
+            </div>
+          </div>
+          <p className="text-xs text-indigo-300 leading-relaxed">
+            Cada persona ociosa (sin asignar) y cada slot vacío costó <strong className="text-white">$8k por ronda</strong>.
+            Los foráneos tienen costo de movilidad de <strong className="text-white">$10k</strong> al moverlos,
+            y los externos de emergencia cuestan <strong className="text-white">$50k</strong> fijos.
+          </p>
+        </div>
+
+        {/* Score explanation per obra */}
+        <div className="bg-indigo-900 rounded-2xl p-4 mb-4 border border-indigo-700">
+          <h2 className="font-bold text-sm text-indigo-300 mb-3">🔍 ¿POR QUÉ ESOS PORCENTAJES?</h2>
+          <div className="space-y-4">
+            {obras.map(obra => {
+              const util = utilidades.find(u => u.obraId === obra.id)
+              return (
+                <div key={obra.id}>
+                  <p className="font-bold text-sm text-white mb-2">
+                    {OBRA_EMOJIS[obra.id]} {OBRA_NAMES[obra.id]} — {util?.utilidad ?? 0}%
+                  </p>
+                  <div className="space-y-1.5">
+                    {obra.slots.map(slot => {
+                      const person = slot.personId ? allTalent.find(t => t.id === slot.personId) : null
+                      if (!person) return (
+                        <div key={slot.id} className="text-xs text-red-400 bg-red-950/40 rounded-lg px-3 py-1.5">
+                          ❌ {slot.role} vacío — -{TIER_PTS[slot.tier] + 8}pts potenciales perdidos
+                        </div>
+                      )
+                      const reasons = explainScore(person)
+                      return (
+                        <div key={slot.id} className="text-xs bg-indigo-800/50 rounded-lg px-3 py-2">
+                          <p className="font-semibold text-white mb-1">{person.avatar} {person.name} ({slot.role})</p>
+                          <div className="flex flex-wrap gap-1">
+                            {reasons.map((r, i) => <span key={i} className="text-indigo-200">{r}</span>)}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 

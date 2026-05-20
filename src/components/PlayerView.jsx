@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useGameState } from '../hooks/useGameState.js'
-import { useTimer } from '../hooks/useTimer.js'
 import ObraCard from './ObraCard.jsx'
 import TalentCard from './TalentCard.jsx'
 import VetoDialog from './VetoDialog.jsx'
@@ -71,24 +70,29 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const obrasRef = useRef([])
   const budgetRef = useRef(300)
   const allTalentRef = useRef([])
+  const roundEndingRef = useRef(false)
+  const scheduledTimeoutsRef = useRef([])
   useEffect(() => { obrasRef.current = obras }, [obras])
   useEffect(() => { budgetRef.current = budget }, [budget])
   useEffect(() => { allTalentRef.current = allTalent }, [allTalent])
+  useEffect(() => { roundEndingRef.current = roundEnding }, [roundEnding])
 
-  // Round timer
-  const handleRoundExpire = useCallback(async () => {
-    if (myPlayer?.is_host && !roundEnding) {
-      await advanceRound()
-    }
-  }, [myPlayer?.is_host, roundEnding, round])
-
-  const { seconds: roundSeconds, start: startRound, reset: resetRound } = useTimer(
-    roundDuration, handleRoundExpire
-  )
-
+  // Server-synced timer — all players read the same round_started_at from DB
+  const [roundSeconds, setRoundSeconds] = useState(roundDuration)
   useEffect(() => {
-    if (status === 'playing') startRound(roundDuration)
-  }, [status])
+    if (status !== 'playing' || !room?.round_started_at) return
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - new Date(room.round_started_at).getTime()) / 1000)
+      const remaining = Math.max(0, roundDuration - elapsed)
+      setRoundSeconds(remaining)
+      if (remaining === 0 && myPlayer?.is_host && !roundEndingRef.current) {
+        advanceRound()
+      }
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [room?.round_started_at, status, roundDuration])
 
   // Show toast notification
   function showNotification(msg, type = 'info') {
@@ -289,10 +293,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       const difficulty = room?.difficulty || 2
       scheduleRoundEvents(nextRound, difficulty)
 
-      await updateRoom({ round: nextRound, budget: newBudget })
+      await updateRoom({ round: nextRound, budget: newBudget, round_started_at: new Date().toISOString() })
       await addLog(`⏭️ Ronda ${nextRound} iniciada. Presupuesto: $${newBudget}k`, 'event')
-      resetRound(roundDuration)
-      startRound(roundDuration)
     } finally {
       setRoundEnding(false)
     }
@@ -380,20 +382,24 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   }
 
   function scheduleRoundEvents(nextRound, difficulty) {
+    // Cancel any events still pending from previous round
+    scheduledTimeoutsRef.current.forEach(t => clearTimeout(t))
+    scheduledTimeoutsRef.current = []
+
     const scripted = (EVENTS_BY_ROUND[nextRound] || []).filter(e => (e.difficulty || 1) <= difficulty)
     const diffEvents = DIFFICULTY_EVENTS[difficulty]?.[nextRound] || []
     const allEvents = [...scripted, ...diffEvents]
     if (allEvents.length === 0) return
 
-    // Space events between 30-60s, scaled to round duration
-    const intervalMs = roundDuration >= 300 ? 50000
-      : roundDuration >= 180 ? 38000
-      : 28000
+    // Minimum 60s between events, first one no earlier than 45s into the round
+    const firstDelay = Math.max(45000, roundDuration * 0.25 * 1000)
+    const intervalMs = Math.max(60000, roundDuration * 0.35 * 1000)
 
     allEvents.forEach((evt, i) => {
-      const jitter = Math.random() * 15000
-      const delay = (i + 1) * (intervalMs + jitter)
-      setTimeout(() => fireScheduledEvent(evt), delay)
+      const jitter = (Math.random() - 0.5) * 10000
+      const delay = firstDelay + i * (intervalMs + jitter)
+      const t = setTimeout(() => fireScheduledEvent(evt), delay)
+      scheduledTimeoutsRef.current.push(t)
     })
   }
 
