@@ -42,7 +42,7 @@ export default function EndScreen({ gameState, players, room, onRestart, proposa
   const emptySlots = obras.reduce((count, obra) => count + obra.slots.filter(s => !s.personId).length, 0)
 
   const winnerPlayer = players?.find(p => {
-    const obraMap = { o1: 'Director Torre Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }
+    const obraMap = { o1: 'Director Nave Industrial Altara', o2: 'Director Puente Río Norte', o3: 'Director Data Center Nube9' }
     return p.role === obraMap[winner?.obraId]
   })
 
@@ -59,11 +59,15 @@ export default function EndScreen({ gameState, players, room, onRestart, proposa
             </>
           ) : (
             <>
-              <div className="text-6xl mb-2">{OBRA_EMOJIS[winner?.obraId] || '🥇'}</div>
-              <h1 className="text-3xl font-black text-yellow-400">
-                {winnerPlayer?.player_name || OBRA_NAMES[winner?.obraId]} gana
+              <div className="text-6xl mb-2">🏆</div>
+              <p className="text-indigo-400 text-sm font-semibold uppercase tracking-widest mb-1">Ganador</p>
+              <h1 className="text-4xl font-black text-yellow-400">
+                {winnerPlayer?.player_name || OBRA_NAMES[winner?.obraId]}
               </h1>
-              <p className="text-indigo-300 mt-1">{OBRA_NAMES[winner?.obraId]} — {winner?.utilidad}% utilidad</p>
+              <div className="mt-2 inline-flex items-center gap-2 bg-yellow-500/20 border border-yellow-500 rounded-full px-4 py-1">
+                <span>{OBRA_EMOJIS[winner?.obraId]}</span>
+                <span className="text-yellow-300 font-bold text-sm">{OBRA_NAMES[winner?.obraId]} — {winner?.utilidad}% utilidad</span>
+              </div>
             </>
           )}
         </div>
