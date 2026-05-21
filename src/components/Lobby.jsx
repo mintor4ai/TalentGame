@@ -135,7 +135,7 @@ export default function Lobby({ onGameStart }) {
         type: 'good',
       })
 
-      await supabase.from('game_rooms').update({ status: 'playing' }).eq('id', roomData.id)
+      await supabase.from('game_rooms').update({ status: 'playing', round_started_at: new Date().toISOString() }).eq('id', roomData.id)
     } catch (e) { setError(e.message) } finally { setLoading(false) }
   }
 
@@ -243,7 +243,7 @@ export default function Lobby({ onGameStart }) {
             <div className="text-6xl mb-4">🏗️</div>
             <h1 className="text-3xl font-black mb-1">WFM Talent Game</h1>
             <p className="text-indigo-300 mb-2 text-sm">Simulación estratégica de Workforce Management</p>
-            <p className="text-indigo-500 mb-8 text-xs">v11/05 · 12:27pm</p>
+            <p className="text-indigo-500 mb-8 text-xs">v{__BUILD_DATE__}</p>
             <div className="space-y-3">
               <button onClick={() => setScreen('create')}
                 className="w-full py-4 rounded-2xl bg-yellow-500 text-black font-bold text-lg hover:bg-yellow-400 transition shadow-lg">

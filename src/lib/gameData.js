@@ -177,6 +177,37 @@ export const DIFFICULTY_EVENTS = {
   },
 }
 
+export const POSITIVE_EVENTS = [
+  {
+    message: '🎉 Cliente amplió el presupuesto',
+    detail: 'Negociación exitosa del equipo directivo. El cliente aprobó un ajuste presupuestal para el trimestre.',
+    impactLabel: 'Presupuesto +$20k — buenas noticias para todos.',
+    type: 'good',
+    action: { type: 'add_budget', amount: 20 },
+  },
+  {
+    message: '⭐ Reconocimiento institucional',
+    detail: 'La empresa fue destacada como empleador del año en infraestructura. El equipo recibe un bono.',
+    impactLabel: 'Presupuesto +$15k — el mercado reconoce su gestión.',
+    type: 'good',
+    action: { type: 'add_budget', amount: 15 },
+  },
+  {
+    message: '🤝 Acuerdo sindical exitoso',
+    detail: 'Las negociaciones con el sindicato cerraron sin conflicto. Se evitó una paralización de obras.',
+    impactLabel: 'Presupuesto +$10k — operación sin interrupciones.',
+    type: 'good',
+    action: { type: 'add_budget', amount: 10 },
+  },
+  {
+    message: '💰 Recuperación de cartera',
+    detail: 'Un cliente moroso pagó su deuda. El departamento financiero liberó los recursos al presupuesto.',
+    impactLabel: 'Presupuesto +$25k — liquidez recuperada.',
+    type: 'good',
+    action: { type: 'add_budget', amount: 25 },
+  },
+]
+
 export function getInitialGameState(difficulty = 2) {
   return {
     obras: JSON.parse(JSON.stringify(OBRAS)),
