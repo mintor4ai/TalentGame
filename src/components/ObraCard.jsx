@@ -83,7 +83,7 @@ export default function ObraCard({
         {obra.slots.map(slot => {
           const person = slot.personId ? allTalent.find(t => t.id === slot.personId) : null
           const compat = isCompat(slot.id)
-          const clickable = selectedPerson && (compat || !slot.personId)
+          const clickable = selectedPerson && compat
 
           return (
             <div

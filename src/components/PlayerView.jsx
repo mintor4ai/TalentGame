@@ -11,6 +11,7 @@ import EndScreen from './EndScreen.jsx'
 import {
   findCompatibleSlots, applyAssignment, removePersonFromObras,
   calcObraUtilidad, getAssignedPersonIds, determineWinner, calcRoundCosts,
+  canAssignToSlot,
 } from '../lib/gameLogic.js'
 import { ROLE_TO_OBRA, ROLES, ROUND_DURATION_SECONDS, MAX_ROUNDS, EXTERNAL_HIRE_COST, FORANEO_MOBILITY_COST, GAP_COST, LOG_TYPES } from '../lib/constants.js'
 import { EXTERNAL_TALENT_TEMPLATE, EVENTS_BY_ROUND, DIFFICULTY_EVENTS, POSITIVE_EVENTS } from '../lib/gameData.js'
@@ -73,10 +74,15 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const allTalentRef = useRef([])
   const roundEndingRef = useRef(false)
   const scheduledTimeoutsRef = useRef([])
+  const isHostRef = useRef(false)
+  const eventAlertRef = useRef(null)
+  const eventQueueRef = useRef([])
   useEffect(() => { obrasRef.current = obras }, [obras])
   useEffect(() => { budgetRef.current = budget }, [budget])
   useEffect(() => { allTalentRef.current = allTalent }, [allTalent])
   useEffect(() => { roundEndingRef.current = roundEnding }, [roundEnding])
+  useEffect(() => { isHostRef.current = myPlayer?.is_host || false }, [myPlayer?.is_host])
+  useEffect(() => { eventAlertRef.current = eventAlert }, [eventAlert])
 
   // Server-synced timer — all players read the same round_started_at from DB
   const [roundSeconds, setRoundSeconds] = useState(roundDuration)
@@ -86,7 +92,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       const elapsed = Math.floor((Date.now() - new Date(room.round_started_at).getTime()) / 1000)
       const remaining = Math.max(0, roundDuration - elapsed)
       setRoundSeconds(remaining)
-      if (remaining === 0 && myPlayer?.is_host && !roundEndingRef.current) {
+      if (remaining === 0 && isHostRef.current && !roundEndingRef.current) {
         advanceRound()
       }
     }
@@ -94,6 +100,26 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
   }, [room?.round_started_at, status, roundDuration])
+
+  function queueEvent(evt) {
+    if (eventAlertRef.current === null) {
+      setEventAlert(evt)
+      playEventAlert()
+    } else {
+      eventQueueRef.current = [...eventQueueRef.current, evt]
+    }
+  }
+
+  function handleDismissEvent() {
+    if (eventQueueRef.current.length > 0) {
+      const [next, ...rest] = eventQueueRef.current
+      eventQueueRef.current = rest
+      setEventAlert(next)
+      playEventAlert()
+    } else {
+      setEventAlert(null)
+    }
+  }
 
   // Show toast notification
   function showNotification(msg, type = 'info') {
@@ -116,9 +142,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     const sinceLastSecond = Date.now() - new Date(latest.created_at).getTime() < 3000
     if (sinceLastSecond) {
       showNotification(latest.message, latest.type)
-      if (latest.type === 'event' || latest.type === 'bad') {
-        setEventAlert(latest)
-        playEventAlert()
+      if (latest.type === 'event' || latest.type === 'bad' || latest.type === 'good') {
+        queueEvent(latest)
       }
     }
   }, [logEntries.length])
@@ -143,6 +168,12 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
 
     const destObra = obras.find(o => o.id === obraId)
     if (!destObra) return
+
+    const destSlot = destObra.slots.find(s => s.id === slotId)
+    if (!canAssignToSlot(selectedPerson, destSlot, destObra)) {
+      showNotification(`❌ ${selectedPerson.role} no puede ocupar un slot de ${destSlot?.role || 'ese rol'}`, 'bad')
+      return
+    }
 
     const destPlayer = players.find(p => ROLE_TO_OBRA[p.role] === obraId)
     const isMyObra = myObraId === obraId
@@ -217,7 +248,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     const person = allTalent.find(t => t.id === proposal.person_id)
     const destObra = obras.find(o => o.id === proposal.to_obra_id)
 
-    if (person && destObra) {
+    const targetSlot = destObra?.slots.find(s => s.id === proposal.slot_id)
+    if (person && destObra && !targetSlot?.personId) {
       const removedObras = removePersonFromObras(obras, person.id)
       const newObras = applyAssignment(removedObras, person.id, proposal.to_obra_id, proposal.slot_id)
 
@@ -232,6 +264,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       })
 
       await addLog(`✅ ${myPlayer.player_name} aceptó: ${person.name} → ${destObra.name}`, 'good')
+    } else if (targetSlot?.personId) {
+      await addLog(`⚠️ El slot ya fue ocupado antes de que ${myPlayer.player_name} pudiera aceptar la propuesta`, 'warn')
     }
     setProposalContext(null)
   }
@@ -257,21 +291,21 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   async function handleHireExternal(proposal) {
     const externalId = `ext_${Date.now()}`
     const external = { ...EXTERNAL_TALENT_TEMPLATE, id: externalId }
+    const destObra = obras.find(o => o.id === proposal.to_obra_id)
 
     const newExtraTalent = [...(gameState.extra_talent || []), external]
-    const removedObras = obras
-    const newObras = applyAssignment(removedObras, externalId, proposal.to_obra_id, proposal.slot_id)
+    const newObras = applyAssignment(obras, externalId, proposal.to_obra_id, proposal.slot_id)
 
     await resolveProposal(proposal.id, false)
     await updateGameState({ obras: newObras, extra_talent: newExtraTalent })
     await updateRoom({ budget: budget - EXTERNAL_HIRE_COST })
-    await addLog(`🆕 ${myPlayer.player_name} contrató externo de emergencia (-$${EXTERNAL_HIRE_COST}k)`, 'warn')
+    await addLog(`🆕 ¡La plantilla crece! ${myPlayer.player_name} contrató un recurso externo para ${destObra?.name || 'una obra'} (-$${EXTERNAL_HIRE_COST}k)`, 'event')
     setProposalContext(null)
   }
 
   // Advance round (host only)
   async function advanceRound() {
-    if (!myPlayer?.is_host || roundEnding) return
+    if (!myPlayer?.is_host || roundEndingRef.current) return
     setRoundEnding(true)
 
     try {
@@ -284,7 +318,10 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       const nextRound = round + 1
 
       if (nextRound > maxRounds) {
-        // Game over
+        // Game over — cancel pending events and clear queue
+        scheduledTimeoutsRef.current.forEach(t => clearTimeout(t))
+        scheduledTimeoutsRef.current = []
+        eventQueueRef.current = []
         await updateRoom({ status: 'ended', budget: newBudget })
         await addLog('🏁 ¡Partida terminada! Calculando resultados...', 'event')
         return
@@ -316,8 +353,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       }
     }
 
-    setEventAlert(enriched)
-    playEventAlert()
+    queueEvent(enriched)
     await addLog(evt.message, evt.type)
 
     if (evt.action?.type === 'clear_slot') {
@@ -374,48 +410,52 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     await addLog(msg, 'bad')
 
     if (hasDemanda) {
-      setEventAlert({
+      queueEvent({
         type: 'bad',
         message: `⚖️ ¡Demanda laboral de ${person.name}!`,
         detail: `${person.name} interpuso una demanda por despido injustificado${person.actas > 0 ? ' — sus actas no fueron suficiente defensa legal' : ''}.`,
         impactLabel: `Costo adicional: -$${demandaCosto}k. Total pagado: -$${totalCosto}k`,
       })
-      playEventAlert()
     }
   }
 
   function scheduleRoundEvents(nextRound, difficulty) {
-    // Cancel any events still pending from previous round
+    // Cancel any events still pending from previous round and clear queue
     scheduledTimeoutsRef.current.forEach(t => clearTimeout(t))
     scheduledTimeoutsRef.current = []
+    eventQueueRef.current = []
 
     const scripted = (EVENTS_BY_ROUND[nextRound] || []).filter(e => (e.difficulty || 1) <= difficulty)
     const diffEvents = DIFFICULTY_EVENTS[difficulty]?.[nextRound] || []
     const allEvents = [...scripted, ...diffEvents]
-    if (allEvents.length === 0) return
 
-    // Minimum 60s between events, first one no earlier than 45s into the round
-    const firstDelay = Math.max(45000, roundDuration * 0.25 * 1000)
-    const intervalMs = Math.max(60000, roundDuration * 0.35 * 1000)
+    // First event at 30-45s, then 15-49s random gaps between events
+    const firstDelay = (30 + Math.floor(Math.random() * 16)) * 1000
+    const getGap = () => (15 + Math.floor(Math.random() * 35)) * 1000
 
-    allEvents.forEach((evt, i) => {
-      const jitter = (Math.random() - 0.5) * 10000
-      const delay = firstDelay + i * (intervalMs + jitter)
-      const t = setTimeout(() => fireScheduledEvent(evt), delay)
+    let cumDelay = firstDelay
+    allEvents.forEach(evt => {
+      const t = setTimeout(() => fireScheduledEvent(evt), cumDelay)
       scheduledTimeoutsRef.current.push(t)
+      cumDelay += getGap()
     })
 
     // 40% de probabilidad de evento positivo aleatorio por ronda
     if (Math.random() < 0.4) {
       const positiveEvt = POSITIVE_EVENTS[Math.floor(Math.random() * POSITIVE_EVENTS.length)]
-      const lastNegativeDelay = allEvents.length > 0
-        ? firstDelay + (allEvents.length - 1) * intervalMs
-        : 0
-      const positiveDelay = Math.max(firstDelay + 30000, lastNegativeDelay + 30000)
+      const positiveDelay = cumDelay + getGap()
       const pt = setTimeout(() => fireScheduledEvent(positiveEvt), positiveDelay)
       scheduledTimeoutsRef.current.push(pt)
     }
   }
+
+  // Schedule round-1 events when host starts the game for the first time
+  const didScheduleRound1Ref = useRef(false)
+  useEffect(() => {
+    if (status !== 'playing' || !isHostRef.current || didScheduleRound1Ref.current) return
+    didScheduleRound1Ref.current = true
+    scheduleRoundEvents(1, room?.difficulty || 2)
+  }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Annotate talent with assigned obra name
   const annotatedTalent = allTalent.map(person => {
@@ -485,7 +525,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
 
       {/* Event alert overlay */}
       {eventAlert && (
-        <EventAlert event={eventAlert} onDismiss={() => setEventAlert(null)} />
+        <EventAlert event={eventAlert} onDismiss={handleDismissEvent} />
       )}
 
       {/* Veto result — proposer decides what to do after veto */}
@@ -659,7 +699,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
         {/* STATS TAB */}
         {tab === 'stats' && (
           <div className="space-y-3">
-            <GanttBar obras={obras} allTalent={annotatedTalent} round={round} maxRounds={MAX_ROUNDS} />
+            <GanttBar obras={obras} allTalent={annotatedTalent} round={round} maxRounds={maxRounds} />
 
             {/* Players list */}
             <div className="bg-indigo-900 rounded-2xl p-4 border border-indigo-800">
