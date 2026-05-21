@@ -248,7 +248,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     const person = allTalent.find(t => t.id === proposal.person_id)
     const destObra = obras.find(o => o.id === proposal.to_obra_id)
 
-    if (person && destObra) {
+    const targetSlot = destObra?.slots.find(s => s.id === proposal.slot_id)
+    if (person && destObra && !targetSlot?.personId) {
       const removedObras = removePersonFromObras(obras, person.id)
       const newObras = applyAssignment(removedObras, person.id, proposal.to_obra_id, proposal.slot_id)
 
@@ -263,6 +264,8 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       })
 
       await addLog(`✅ ${myPlayer.player_name} aceptó: ${person.name} → ${destObra.name}`, 'good')
+    } else if (targetSlot?.personId) {
+      await addLog(`⚠️ El slot ya fue ocupado antes de que ${myPlayer.player_name} pudiera aceptar la propuesta`, 'warn')
     }
     setProposalContext(null)
   }
@@ -315,7 +318,10 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       const nextRound = round + 1
 
       if (nextRound > maxRounds) {
-        // Game over
+        // Game over — cancel pending events and clear queue
+        scheduledTimeoutsRef.current.forEach(t => clearTimeout(t))
+        scheduledTimeoutsRef.current = []
+        eventQueueRef.current = []
         await updateRoom({ status: 'ended', budget: newBudget })
         await addLog('🏁 ¡Partida terminada! Calculando resultados...', 'event')
         return
@@ -442,6 +448,14 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
       scheduledTimeoutsRef.current.push(pt)
     }
   }
+
+  // Schedule round-1 events when host starts the game for the first time
+  const didScheduleRound1Ref = useRef(false)
+  useEffect(() => {
+    if (status !== 'playing' || !isHostRef.current || didScheduleRound1Ref.current) return
+    didScheduleRound1Ref.current = true
+    scheduleRoundEvents(1, room?.difficulty || 2)
+  }, [status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Annotate talent with assigned obra name
   const annotatedTalent = allTalent.map(person => {
@@ -685,7 +699,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
         {/* STATS TAB */}
         {tab === 'stats' && (
           <div className="space-y-3">
-            <GanttBar obras={obras} allTalent={annotatedTalent} round={round} maxRounds={MAX_ROUNDS} />
+            <GanttBar obras={obras} allTalent={annotatedTalent} round={round} maxRounds={maxRounds} />
 
             {/* Players list */}
             <div className="bg-indigo-900 rounded-2xl p-4 border border-indigo-800">
