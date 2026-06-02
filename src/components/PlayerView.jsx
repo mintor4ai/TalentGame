@@ -77,12 +77,18 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
   const isHostRef = useRef(false)
   const eventAlertRef = useRef(null)
   const eventQueueRef = useRef([])
+  const roundRef = useRef(1)
+  const maxRoundsRef = useRef(3)
+  const difficultyRef = useRef(2)
   useEffect(() => { obrasRef.current = obras }, [obras])
   useEffect(() => { budgetRef.current = budget }, [budget])
   useEffect(() => { allTalentRef.current = allTalent }, [allTalent])
   useEffect(() => { roundEndingRef.current = roundEnding }, [roundEnding])
   useEffect(() => { isHostRef.current = myPlayer?.is_host || false }, [myPlayer?.is_host])
   useEffect(() => { eventAlertRef.current = eventAlert }, [eventAlert])
+  useEffect(() => { roundRef.current = round }, [round])
+  useEffect(() => { maxRoundsRef.current = maxRounds }, [maxRounds])
+  useEffect(() => { difficultyRef.current = room?.difficulty || 2 }, [room?.difficulty])
 
   // Server-synced timer — all players read the same round_started_at from DB
   const [roundSeconds, setRoundSeconds] = useState(roundDuration)
@@ -303,21 +309,23 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
     setProposalContext(null)
   }
 
-  // Advance round (host only)
+  // Advance round (host only) — uses refs exclusively to avoid stale closure bugs
   async function advanceRound() {
-    if (!myPlayer?.is_host || roundEndingRef.current) return
+    if (!isHostRef.current || roundEndingRef.current) return
     setRoundEnding(true)
 
     try {
-      const { totalCost, breakdown, newBudget } = calcRoundCosts(obras, allTalent, budget)
+      const { breakdown, newBudget } = calcRoundCosts(
+        obrasRef.current, allTalentRef.current, budgetRef.current
+      )
 
       for (const item of breakdown) {
         await addLog(item.message, item.amount > 0 ? 'bad' : 'info')
       }
 
-      const nextRound = round + 1
+      const nextRound = roundRef.current + 1
 
-      if (nextRound > maxRounds) {
+      if (nextRound > maxRoundsRef.current) {
         // Game over — cancel pending events and clear queue
         scheduledTimeoutsRef.current.forEach(t => clearTimeout(t))
         scheduledTimeoutsRef.current = []
@@ -327,9 +335,7 @@ export default function PlayerView({ room: initialRoom, playerId, onRestart }) {
         return
       }
 
-      // Schedule events staggered within the new round
-      const difficulty = room?.difficulty || 2
-      scheduleRoundEvents(nextRound, difficulty)
+      scheduleRoundEvents(nextRound, difficultyRef.current)
 
       await updateRoom({ round: nextRound, budget: newBudget, round_started_at: new Date().toISOString() })
       await addLog(`⏭️ Ronda ${nextRound} iniciada. Presupuesto: $${newBudget}k`, 'event')
